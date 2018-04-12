@@ -14,6 +14,7 @@ import (
 	"fmt"
 	zmq "github.com/pebbe/zmq3"
 	"log"
+	"math"
 	"math/rand"
 	"time"
 )
@@ -59,7 +60,8 @@ func client_task(receiverIP string, numMessages int, msgSize int, opType string)
 
 	rand.Read(message.Data)
 
-	var totTime int64 = 0
+	var totTime float64 = 0
+	var totTimeSq float64 = 0
 	for i := 0; i < numMessages; i++ {
 		//time.Sleep(time.Second)
 		//client.SendMessage(fmt.Sprintf("request #%d", request_nbr))
@@ -84,13 +86,18 @@ func client_task(receiverIP string, numMessages int, msgSize int, opType string)
 			}
 		}
 		elapsed := time.Since(start)
-		//fmt.Println("READ TIME:",  elapsed)
-		totTime += int64(elapsed)
-
+		//fmt.Println("READ TIME:", elapsed)
+		totTime += float64(float64(elapsed) / 1000)
+		totTimeSq += float64(elapsed/1000) * float64(elapsed/1000)
 		request_nbr += 2
 	}
-	fmt.Println("Avg Latency "+opType, totTime/int64(1000*numMessages))
 
+	avgTime := float64(totTime / float64(numMessages))
+	avgTimeSq := float64(totTimeSq / float64(numMessages))
+
+	stdDev := math.Sqrt(avgTimeSq - avgTime*avgTime)
+
+	fmt.Printf("Avg & Std %s  Latency %.2f %.2f\n", opType, avgTime/1000, stdDev/1000)
 }
 
 //  This is our server task.
@@ -133,6 +140,7 @@ func server_worker() {
 	}
 
 	var read_data []byte
+	var prevSize int
 	var isDataInitialized bool = false
 
 	for {
@@ -143,10 +151,11 @@ func server_worker() {
 		message := CreateMessageFromGob(msg[1])
 
 		msgSize := message.Msg_size
-		if isDataInitialized == false {
+		if isDataInitialized == false || prevSize != msgSize {
 			read_data = make([]byte, msgSize)
 			rand.Read(read_data)
 			isDataInitialized = true
+			prevSize = msgSize
 		}
 
 		//sender
@@ -194,7 +203,7 @@ func main() {
 	}
 
 	//  Run for 5 seconds then quit
-	time.Sleep(1000000 * time.Second)
+	//time.Sleep(1000000 * time.Second)
 }
 
 func set_id(soc *zmq.Socket) {
